@@ -4,27 +4,13 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
+#include "header.h"
 
-struct AdjListNode {
-	int dest;
-	struct AdjListNode *next;
-};
-
-struct Node {
-	int pid;
-	struct AdjListNode *head;
-};
-
-struct Graph
-{
-    int entries;
-    struct Node *node;
-};
-
-#define MAX_NODE 1000
-#define FAIL 1
-FILE *fp;
+char *file;
 struct Graph *graph;
+int this_node;
+int this_pid;
 
 int deleteEntry(int num, struct Graph *graph)
 {
@@ -74,8 +60,9 @@ int deleteEntry(int num, struct Graph *graph)
 			
 		}
 	}
-
+	return 0;
 }
+
 int deleteGraph(struct Graph *graph)
 {
 	if (graph == NULL)
@@ -95,6 +82,7 @@ int deleteGraph(struct Graph *graph)
 		node->head = NULL;
 		node->pid = 0;
 	}	
+	return 0;
 }
 
 struct AdjListNode* newAdjListNode(int dest)
@@ -140,7 +128,7 @@ int updateDbFrmArg(int argc, char **argv, struct Graph *graph)
 		int dest = atoi(argv[i]);
 		updateGraph(src, dest, graph);
 	}
-
+	return 0;
 }
 
 
@@ -164,11 +152,18 @@ int createGraph(int type, int data, struct Graph *graph)
 			adjNode->next = node->head;
 			node->head = adjNode;
 	}
+	return 0;
 }
 
 
-int updateDbFrmFile(FILE *fp, struct Graph *graph)
+int updateDbFrmFile(char *file, struct Graph *graph)
 {
+	FILE *fp = fopen(file, "r+");
+	if (fp == NULL) {
+		perror("fopen");
+		exit(FAIL);
+	}
+
 	if (graph == NULL || fp == NULL)
 		return -1;
 	char buf[1000];
@@ -186,10 +181,17 @@ int updateDbFrmFile(FILE *fp, struct Graph *graph)
 			}
 		}
 	}
+	fclose(fp);
+	return 0;
 }
 
-int updateFilefrmDb(FILE *fp,  struct Graph *graph)
-{
+int updateFilefrmDb(char *file,  struct Graph *graph)
+{	
+	FILE *fp = fopen(file, "w+");
+	if (fp == NULL) {
+		perror("fopen");
+		exit(FAIL);
+	}
 	
 	if (graph == NULL || fp == NULL)
 		return -1;
@@ -205,6 +207,8 @@ int updateFilefrmDb(FILE *fp,  struct Graph *graph)
 		}
 		fprintf(fp, "\n");		
 	}
+	fclose(fp);
+	return 0;
 }
 
 void printGraph(struct Graph* graph)
@@ -256,16 +260,16 @@ int shortestPath(int src, int dst, struct Graph *graph)
 	return s_path+1;
 
 }
-int this_node;
 
 void sendSignal(struct Graph *graph) 
 {
+	printf("sendSignal\n");
 	if (graph == NULL)
 		return;
 
 	for (int i=0; i < graph->entries; i++) {
         	struct Node *node = &graph->node[i];
-                if (node->pid == 0)
+                if (node->pid == 0 || node->pid == this_pid)
                         continue;
 		if (kill(node->pid, SIGUSR1) < 0) {
 			perror("killall");
@@ -274,40 +278,64 @@ void sendSignal(struct Graph *graph)
 
 }
 
+
+void *handler(void *ptr)
+{
+	printf("handler\n");
+	while(1) {
+	switch (state) {
+		case RUNNING:
+			sleep(1);
+			break;
+		case TERMINATING:
+			printf("terminating\n");
+			deleteEntry(this_node, graph);
+      			updateFilefrmDb(file, graph);
+			sendSignal(graph);
+			state = RUNNING;
+        		exit(1);
+			break;
+		case SIGNALLING:
+			printf("updating\n");
+			deleteEntry(this_node, graph);
+			deleteGraph(graph);
+       	 		updateDbFrmFile(file, graph);
+			state = RUNNING;
+			break;
+		default:
+			printf("unknown state\n");
+			sleep(1);
+		}	
+	}
+}
+
+
 void terminate_isr(int val)
 {
- 	deleteEntry(this_node, graph);
-	
-	rewind(fp);
-        updateFilefrmDb(fp, graph);
-	
-	sendSignal(graph);
+	printf("in Term Sig Handler\n");
+	state = TERMINATING;
 
 }
 
 void userSignal_isr(int val)
 {
-	deleteGraph(graph);
-	rewind(fp);
-	updateDbFrmFile(fp, graph);
+	printf("in User Sig Handler\n");
+	state = SIGNALLING;
 }
 
 int main(int argc, char **argv)
 {
-		
-	
+	int ret;	
+	pthread_t tid;
 	if (argc < 4) {
 		printf("invalid arg\n");
 		exit(FAIL);
 	}
 	
-	fp = fopen(argv[1], "r+");
-	if (fp == NULL) {
-		perror("fopen");
-		exit(FAIL);
-	}
+	file = argv[1];
+
 	
-	if (SIG_ERR == signal(SIGTERM, terminate_isr)) {
+	if (SIG_ERR == signal(SIGINT, terminate_isr)) {
                 perror ("sigal:");
                 exit(EXIT_FAILURE);
         }
@@ -316,21 +344,23 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
         }
 
+	if (ret = pthread_create(&tid, NULL, handler, NULL)) {
+                perror("thread ");
+                printf("return %d\n", ret);
+                exit(1);
+        }
+
 	graph = (struct Graph *) malloc(sizeof(struct Graph));
 	graph->entries = MAX_NODE;
 	graph->node = (struct Node *) malloc(sizeof(struct Node)*MAX_NODE);
 	memset(graph->node, 0x00, sizeof(struct Node)*MAX_NODE);
 	
-	updateDbFrmFile(fp, graph);
-	printGraph(graph);
+	updateDbFrmFile(file, graph);
 	this_node = atoi(argv[2]);
+	this_pid = getpid();
 	updateDbFrmArg(argc, argv, graph);
-	printGraph(graph);
-	rewind(fp);
-	updateFilefrmDb(fp, graph);
-//	printf("Shortest path %d\n", shortestPath(100, 3, graph));
-//	deleteEntry(3, graph);
-//	printGraph(graph);
+	updateFilefrmDb(file, graph);
+	sendSignal(graph);
 	
 	int option;
 	while(1) {
