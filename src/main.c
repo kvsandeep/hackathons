@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <signal.h>
 
 struct AdjListNode {
 	int dest;
@@ -123,7 +124,6 @@ int updateGraph(int src, int dst, struct Graph *graph)
     	newNode->next = src_node->head;
     	src_node->head = newNode;
  
-    // Since graph is undirected, add an edge from dest to src also
     	newNode = newAdjListNode(src);
     	newNode->next = dst_node->head;
     	dst_node->head = newNode;
@@ -256,6 +256,41 @@ int shortestPath(int src, int dst, struct Graph *graph)
 	return s_path+1;
 
 }
+int this_node;
+
+void sendSignal(struct Graph *graph) 
+{
+	if (graph == NULL)
+		return;
+
+	for (int i=0; i < graph->entries; i++) {
+        	struct Node *node = &graph->node[i];
+                if (node->pid == 0)
+                        continue;
+		if (kill(node->pid, SIGUSR1) < 0) {
+			perror("killall");
+		}
+	}
+
+}
+
+void terminate_isr(int val)
+{
+ 	deleteEntry(this_node, graph);
+	
+	rewind(fp);
+        updateFilefrmDb(fp, graph);
+	
+	sendSignal(graph);
+
+}
+
+void userSignal_isr(int val)
+{
+	deleteGraph(graph);
+	rewind(fp);
+	updateDbFrmFile(fp, graph);
+}
 
 int main(int argc, char **argv)
 {
@@ -271,6 +306,15 @@ int main(int argc, char **argv)
 		perror("fopen");
 		exit(FAIL);
 	}
+	
+	if (SIG_ERR == signal(SIGTERM, terminate_isr)) {
+                perror ("sigal:");
+                exit(EXIT_FAILURE);
+        }
+	if (SIG_ERR == signal(SIGUSR1, userSignal_isr)) {
+                perror ("sigal:");
+                exit(EXIT_FAILURE);
+        }
 
 	graph = (struct Graph *) malloc(sizeof(struct Graph));
 	graph->entries = MAX_NODE;
@@ -279,11 +323,32 @@ int main(int argc, char **argv)
 	
 	updateDbFrmFile(fp, graph);
 	printGraph(graph);
+	this_node = atoi(argv[2]);
 	updateDbFrmArg(argc, argv, graph);
 	printGraph(graph);
 	rewind(fp);
 	updateFilefrmDb(fp, graph);
 //	printf("Shortest path %d\n", shortestPath(100, 3, graph));
-	deleteEntry(3, graph);
-	printGraph(graph);
+//	deleteEntry(3, graph);
+//	printGraph(graph);
+	
+	int option;
+	while(1) {
+		printf(	"1: Print graph\n" 
+			"2: show distance\n");
+		scanf("%d", &option);
+		int src, dst;	
+		switch(option) {
+			case 1:
+				printGraph(graph);
+				break;
+			case 2:
+				printf("i/p format: src_id <space> dst_id\n");
+				scanf("%d %d", &src, &dst);
+				 printf("Shortest path %d\n", shortestPath(src, dst, graph));
+				break;
+			default:
+				printf("invalid option\n");
+		}
+	}
 }
