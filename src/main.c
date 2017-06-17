@@ -36,20 +36,21 @@ struct AdjListNode* newAdjListNode(int dest)
 
 int updateGraph(int src, int dst, struct Graph *graph)
 {
-	struct Node *node;
+	struct Node *src_node, *dst_node;
 	if (graph == NULL)
 		return -1;
-	node = &graph->node[src];
-	node->pid = getpid();
+	src_node = &graph->node[src];
+	dst_node = &graph->node[dst];
+	src_node->pid = getpid();
 	
 	struct AdjListNode* newNode = newAdjListNode(dst);
-    	newNode->next = node->head;
-    	node->head = newNode;
+    	newNode->next = src_node->head;
+    	src_node->head = newNode;
  
     // Since graph is undirected, add an edge from dest to src also
     	newNode = newAdjListNode(src);
-    	newNode->next = node->head;
-    	node->head = newNode;
+    	newNode->next = dst_node->head;
+    	dst_node->head = newNode;
 	return 0;
 }
 	
@@ -59,7 +60,7 @@ int updateDbFrmArg(int argc, char **argv, struct Graph *graph)
 		return -1;
 
 	for (int i=3; i<argc; i++) {
-		int src = atoi(argv[0]);
+		int src = atoi(argv[2]);
 		int dest = atoi(argv[i]);
 		updateGraph(src, dest, graph);
 	}
@@ -118,9 +119,10 @@ int updateFilefrmDb(FILE *fp,  struct Graph *graph)
 		return -1;
 	for (int i=0; i < graph->entries; i++) {
 		struct Node *node = &graph->node[i];
-		if (node == NULL)
+		if (node->pid == 0)
 			continue;
 		fprintf(fp, "%d %d ", i, node->pid);
+		printf("only 1\n");
 		struct AdjListNode *adjNode = node->head;
 		while (adjNode) {
 			fprintf(fp, "%d ", adjNode->dest);
@@ -130,6 +132,26 @@ int updateFilefrmDb(FILE *fp,  struct Graph *graph)
 	}
 }
 
+void printGraph(struct Graph* graph)
+{
+    int v;
+    for (v = 0; v < graph->entries; ++v)
+    {
+	struct Node *node = &graph->node[v];
+	if (node->pid == 0)
+		continue; 
+
+        struct AdjListNode* pCrawl = graph->node[v].head;
+
+        printf("\n Adjacency list of vertex %d\n head ", v);
+        while (pCrawl)
+        {
+            printf("-> %d", pCrawl->dest);
+            pCrawl = pCrawl->next;
+        }
+        printf("\n");
+    }
+}
 
 int main(int argc, char **argv)
 {
@@ -152,7 +174,11 @@ int main(int argc, char **argv)
 	memset(graph->node, 0x00, sizeof(struct Node)*MAX_NODE);
 	
 	updateDbFrmFile(fp, graph);
+	printGraph(graph);
 	updateDbFrmArg(argc, argv, graph);
+	printGraph(graph);
+	rewind(fp);
+	updateFilefrmDb(fp, graph);
 }
 	
 
