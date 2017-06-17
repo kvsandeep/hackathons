@@ -25,6 +25,77 @@ struct Graph
 FILE *fp;
 struct Graph *graph;
 
+int deleteEntry(int num, struct Graph *graph)
+{
+	if (graph == NULL)
+		return -1;
+	
+	
+	struct Node *node = &graph->node[num];
+	if (node->pid == 0)
+		return -1;
+	struct AdjListNode *adjNode = node->head;
+	struct AdjListNode *temp; 
+	while(adjNode) {
+		temp = adjNode;
+		adjNode = adjNode->next;
+		free(temp);
+	}
+	node->head = NULL;
+	node->pid = 0;
+	
+	
+	for (int i=0; i<graph->entries; i++) {
+		struct Node *node = &graph->node[i];
+		if (node->pid == 0)
+			continue;
+		struct AdjListNode *adjNode = node->head;
+		struct AdjListNode *temp;
+		if (adjNode == NULL)
+			continue;
+		while (adjNode->dest == num) {
+			temp = adjNode;
+			node->head = adjNode->next;
+			free(temp);
+			adjNode = node->head;
+		}
+		
+		while(adjNode) {
+
+			if (adjNode->dest == num) {
+				free(temp->next);
+				temp->next = adjNode->next;
+				adjNode = temp;
+			}
+			
+			temp = adjNode;
+			adjNode = adjNode->next;
+			
+		}
+	}
+
+}
+int deleteGraph(struct Graph *graph)
+{
+	if (graph == NULL)
+		return -1;
+	
+	for (int i=0; i<graph->entries; i++) {
+		struct Node *node = &graph->node[i];
+		if (node->pid == 0)
+			continue;
+		struct AdjListNode *adjNode = node->head;
+		struct AdjListNode *temp; 
+		while(adjNode) {
+			temp = adjNode;
+			adjNode = adjNode->next;
+			free(temp);
+		}
+		node->head = NULL;
+		node->pid = 0;
+	}	
+}
+
 struct AdjListNode* newAdjListNode(int dest)
 {
     struct AdjListNode* newNode =
@@ -41,6 +112,11 @@ int updateGraph(int src, int dst, struct Graph *graph)
 		return -1;
 	src_node = &graph->node[src];
 	dst_node = &graph->node[dst];
+	if (dst_node->pid == 0 || (src == dst)) {
+		src_node->pid = getpid();
+		printf("destination node %d not present\n", dst);
+		return -1;
+	}
 	src_node->pid = getpid();
 	
 	struct AdjListNode* newNode = newAdjListNode(dst);
@@ -122,7 +198,6 @@ int updateFilefrmDb(FILE *fp,  struct Graph *graph)
 		if (node->pid == 0)
 			continue;
 		fprintf(fp, "%d %d ", i, node->pid);
-		printf("only 1\n");
 		struct AdjListNode *adjNode = node->head;
 		while (adjNode) {
 			fprintf(fp, "%d ", adjNode->dest);
@@ -143,7 +218,7 @@ void printGraph(struct Graph* graph)
 
         struct AdjListNode* pCrawl = graph->node[v].head;
 
-        printf("\n Adjacency list of vertex %d\n head ", v);
+        printf(" %d head ", v);
         while (pCrawl)
         {
             printf("-> %d", pCrawl->dest);
@@ -151,6 +226,35 @@ void printGraph(struct Graph* graph)
         }
         printf("\n");
     }
+}
+
+int shortestPath(int src, int dst, struct Graph *graph)
+{
+	struct Node *src_node, *dst_node;
+	if (graph == NULL)
+		return -1;
+	src_node = &graph->node[src];
+	dst_node = &graph->node[dst];
+	if ((src_node->pid == 0 )||( dst_node->pid == 0))
+		return -1;
+	int s_path = -1;	
+	struct AdjListNode *adjNode = src_node->head;
+	while(adjNode) {
+		if (adjNode->dest == dst)
+			return 1;
+		int ret = shortestPath(adjNode->dest, dst, graph);
+		if (ret < 0) {
+			adjNode = adjNode->next;
+			continue;
+		}
+		if (s_path == -1 || ret < s_path)
+			s_path = ret;
+		adjNode = adjNode->next;
+	}
+	if (s_path < 0)
+		return s_path;
+	return s_path+1;
+
 }
 
 int main(int argc, char **argv)
@@ -179,8 +283,7 @@ int main(int argc, char **argv)
 	printGraph(graph);
 	rewind(fp);
 	updateFilefrmDb(fp, graph);
+//	printf("Shortest path %d\n", shortestPath(100, 3, graph));
+	deleteEntry(3, graph);
+	printGraph(graph);
 }
-	
-
-
-
