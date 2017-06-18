@@ -155,7 +155,7 @@ int createGraph(int type, int data, struct Graph *graph)
 	return 0;
 }
 
-
+/* reads File and update data structres in RAM */
 int updateDbFrmFile(char *file, struct Graph *graph)
 {
 	FILE *fp = fopen(file, "r+");
@@ -185,6 +185,7 @@ int updateDbFrmFile(char *file, struct Graph *graph)
 	return 0;
 }
 
+/* update File from data structures in RAM */
 int updateFilefrmDb(char *file,  struct Graph *graph)
 {	
 	FILE *fp = fopen(file, "w+");
@@ -231,7 +232,7 @@ void printGraph(struct Graph* graph)
         printf("\n");
     }
 }
-
+int hash[MAX_NODE];
 int shortestPath(int src, int dst, struct Graph *graph)
 {
 	struct Node *src_node, *dst_node;
@@ -241,11 +242,19 @@ int shortestPath(int src, int dst, struct Graph *graph)
 	dst_node = &graph->node[dst];
 	if ((src_node->pid == 0 )||( dst_node->pid == 0))
 		return -1;
+	if (src == dst)
+		return 0;
 	int s_path = -1;	
 	struct AdjListNode *adjNode = src_node->head;
+
 	while(adjNode) {
 		if (adjNode->dest == dst)
 			return 1;
+		if (hash[adjNode->dest] > 0) {
+			adjNode = adjNode->next;
+                        continue;
+		}
+		hash[adjNode->dest]++;
 		int ret = shortestPath(adjNode->dest, dst, graph);
 		if (ret < 0) {
 			adjNode = adjNode->next;
@@ -259,6 +268,13 @@ int shortestPath(int src, int dst, struct Graph *graph)
 		return s_path;
 	return s_path+1;
 
+}
+
+int findShortestPath(int src, int dst, struct Graph *graph)
+{
+	memset(hash, 0x00, MAX_NODE*sizeof(char));
+	return shortestPath(src, dst, graph);
+	
 }
 /* Send a user signal to all process to update their db */
 void sendSignal(struct Graph *graph) 
@@ -336,7 +352,8 @@ int main(int argc, char **argv)
 	int ret;	
 	pthread_t tid;
 	if (argc < 4) {
-		printf("invalid arg\n");
+		printf("invalid argument!! Valid argument is\n");
+		printf("node <text_file> <current node id> <adjesent node1> ...\n");
 		exit(FAIL);
 	}
 	
@@ -371,6 +388,7 @@ int main(int argc, char **argv)
 	sendSignal(graph);
 	
 	int option;
+	int res;
 	while(1) {
 		printf(	"1: Print graph\n" 
 			"2: show distance\n");
@@ -383,7 +401,11 @@ int main(int argc, char **argv)
 			case 2:
 				printf("i/p format: src_id <space> dst_id\n");
 				scanf("%d %d", &src, &dst);
-				 printf("Shortest path %d\n", shortestPath(src, dst, graph));
+				res = findShortestPath(src, dst, graph);
+				if (res == -1)
+					printf("no route found\n");
+				else		
+				 	printf("Shortest path %d\n", res);
 				break;
 			default:
 				printf("invalid option\n");
