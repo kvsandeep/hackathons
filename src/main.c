@@ -260,7 +260,7 @@ int shortestPath(int src, int dst, struct Graph *graph)
 	return s_path+1;
 
 }
-
+/* Send a user signal to all process to update their db */
 void sendSignal(struct Graph *graph) 
 {
 	printf("sendSignal\n");
@@ -297,7 +297,7 @@ void *handler(void *ptr)
 			break;
 		case SIGNALLING:
 			printf("updating\n");
-			deleteEntry(this_node, graph);
+		//	deleteEntry(this_node, graph);
 			deleteGraph(graph);
        	 		updateDbFrmFile(file, graph);
 			state = RUNNING;
@@ -314,6 +314,10 @@ void terminate_isr(int val)
 {
 	printf("in Term Sig Handler\n");
 	state = TERMINATING;
+	if (SIG_ERR == signal(SIGINT, terminate_isr)) {
+                perror ("sigal:");
+                exit(EXIT_FAILURE);
+        }
 
 }
 
@@ -321,6 +325,10 @@ void userSignal_isr(int val)
 {
 	printf("in User Sig Handler\n");
 	state = SIGNALLING;
+	if (SIG_ERR == signal(SIGUSR1, userSignal_isr)) {
+        	perror ("sigal:");
+                exit(EXIT_FAILURE);
+        }
 }
 
 int main(int argc, char **argv)

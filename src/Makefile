@@ -1,6 +1,6 @@
-CFLAGS = -c -Wall --std=c99
+CFLAGS = -c -Wall --std=c99 -g
 
-LDFLAG = -pthread
+LDFLAG = -pthread -g
 
 INCLUDES = -I .
 
@@ -13,4 +13,4 @@ node: main.o
 	$(CC) -c $^ $(INCLUDES) $(CFLAGS) 
         
 clean:
-	rm *.o
+	rm *.o node
